@@ -1,0 +1,64 @@
+name: conman check
+description: Run conman's budget-gated context-stack check (conman check --map) in CI.
+author: Bronson Hill
+
+branding:
+  icon: alert-triangle
+  color: yellow
+
+inputs:
+  path:
+    description: Directory to scan for context-stack entry points.
+    required: false
+    default: "."
+  args:
+    description: Extra flags passed through to `conman check --map` (e.g. "--budget 8000").
+    required: false
+    default: ""
+  version:
+    description: npm version or dist-tag of @bronsonhill/conman to run.
+    required: false
+    default: "latest"
+  node-version:
+    description: Node.js version to set up before running conman.
+    required: false
+    default: "20"
+  sarif-file:
+    description: >-
+      If set, also run a single-entry `conman check <path> --format sarif` and write
+      the SARIF document to this path. `--map` has no SARIF form, so this is a
+      separate single-entry run and does not change the pass/fail result of the gate.
+    required: false
+    default: ""
+  upload-sarif:
+    description: >-
+      Upload `sarif-file` to GitHub code scanning via github/codeql-action/upload-sarif.
+      Ignored unless `sarif-file` is set.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Run conman check --map
+      shell: bash
+      run: npx --yes @bronsonhill/conman@${{ inputs.version }} check --map "${{ inputs.path }}" ${{ inputs.args }}
+
+    - name: Generate SARIF
+      if: inputs.sarif-file != ''
+      shell: bash
+      # Single-entry run: `check --map` does not emit SARIF. Non-fatal; the gate
+      # result above is authoritative.
+      continue-on-error: true
+      run: npx --yes @bronsonhill/conman@${{ inputs.version }} check "${{ inputs.path }}" --format sarif > "${{ inputs.sarif-file }}"
+
+    - name: Upload SARIF
+      if: ${{ inputs.sarif-file != '' && inputs.upload-sarif == 'true' && always() }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.sarif-file }}

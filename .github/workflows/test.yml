@@ -1,0 +1,92 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  # conman ref the self-test builds and runs. Must match CONMAN_VERSION (the
+  # version the action is asked to run, resolved from the local install below).
+  # Once @bronsonhill/conman is on npm this whole build dance can go away and the
+  # jobs can just pass `version: <n>` straight to the action.
+  CONMAN_REF: "v0.1.0"
+  CONMAN_VERSION: "0.1.0"
+
+jobs:
+  # @bronsonhill/conman is not published to npm yet, so `npx @bronsonhill/conman`
+  # (what action.yml runs) cannot fetch it. Build conman from source, pack it, and
+  # publish the tarball as an artifact. Each smoke-test job installs that tarball
+  # into the workspace so npx resolves it locally instead of hitting the registry.
+  build-conman:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out conman
+        uses: actions/checkout@v4
+        with:
+          repository: bronsonhill/conman
+          ref: ${{ env.CONMAN_REF }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+      - run: npm run build
+      - name: Pack conman to a stable path
+        run: |
+          npm pack
+          mv bronsonhill-conman-*.tgz conman.tgz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: conman-tarball
+          path: conman.tgz
+          retention-days: 1
+
+  passes-on-clean-fixture:
+    needs: build-conman
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/download-artifact@v4
+        with:
+          name: conman-tarball
+      - name: Install conman locally so npx resolves it without the registry
+        run: npm install --no-save --no-package-lock ./conman.tgz
+      - name: conman check should pass
+        uses: ./
+        with:
+          path: test/fixture
+          version: ${{ env.CONMAN_VERSION }}
+
+  fails-on-overbudget-fixture:
+    needs: build-conman
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/download-artifact@v4
+        with:
+          name: conman-tarball
+      - name: Install conman locally so npx resolves it without the registry
+        run: npm install --no-save --no-package-lock ./conman.tgz
+      - name: conman check should fail
+        id: check
+        continue-on-error: true
+        uses: ./
+        with:
+          path: test/fixture-overbudget
+          version: ${{ env.CONMAN_VERSION }}
+      - name: assert the gate failed
+        run: |
+          if [ "${{ steps.check.outcome }}" != "failure" ]; then
+            echo "expected the over-budget fixture to fail the gate, got '${{ steps.check.outcome }}'"
+            exit 1
+          fi
+          echo "over-budget fixture failed the gate as expected"

@@ -1,0 +1,20 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Build / tooling output
+dist/
+coverage/
+*.tsbuildinfo
+
+# conman scratch output
+*.sarif
+conman.html
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
