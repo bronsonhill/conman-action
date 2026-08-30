@@ -1,0 +1,44 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  # Pinned so the smoke tests do not drift with a new conman release. Bump
+  # alongside a new major tag of this action.
+  CONMAN_VERSION: "0.1.0"
+
+jobs:
+  passes-on-clean-fixture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: conman check should pass
+        uses: ./
+        with:
+          path: test/fixture
+          version: ${{ env.CONMAN_VERSION }}
+
+  fails-on-overbudget-fixture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: conman check should fail
+        id: check
+        continue-on-error: true
+        uses: ./
+        with:
+          path: test/fixture-overbudget
+          version: ${{ env.CONMAN_VERSION }}
+      - name: assert the gate failed
+        run: |
+          if [ "${{ steps.check.outcome }}" != "failure" ]; then
+            echo "expected the over-budget fixture to fail the gate, got '${{ steps.check.outcome }}'"
+            exit 1
+          fi
+          echo "over-budget fixture failed the gate as expected"
