@@ -34,9 +34,10 @@ jobs:
           node-version: "20"
       - run: npm ci
       - run: npm run build
-      - run: npm pack --pack-destination dist-pack
-      - name: Rename tarball to a stable path
-        run: mv dist-pack/*.tgz conman.tgz
+      - name: Pack conman to a stable path
+        run: |
+          npm pack
+          mv bronsonhill-conman-*.tgz conman.tgz
       - uses: actions/upload-artifact@v4
         with:
           name: conman-tarball
